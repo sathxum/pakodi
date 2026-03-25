@@ -1,22 +1,43 @@
-name: Native-macOS-VNC
+name: Native-macOS-VNC-NoBlackScreen
 
 on:
   workflow_dispatch:
 
 jobs:
   macos-setup:
-    runs-on: macos-latest
+    runs-on: macos-latest # Native macOS runner
     steps:
-      - name: Create New Admin User & Enable VNC
+      - name: Create New Admin User
         run: |
-          echo "Creating new admin user..."
-          # Naya admin user 'sinket' bana rahe hain jiska password 'Admin@123' hoga
+          echo "Creating new admin user 'sinket'..."
+          # Admin user 'sinket' with password 'Admin@123'
           sudo sysadminctl -addUser sinket -fullName "Sinket Admin" -password "Admin@123" -admin
+          echo "✅ User created."
+
+      - name: Permanently Fix TCC Screen Permissions (No Black Screen)
+        run: |
+          echo "Bypassing TCC Screen Recording permissions database..."
+          TCC_DB_PATH="/Library/Application Support/com.apple.TCC/TCC.db"
           
+          # 1. Granting Screen Capture permission to ScreensharingAgent (Fixes Black Screen Image)
+          sudo sqlite3 "$TCC_DB_PATH" "REPLACE INTO access VALUES('kTCCServiceScreenCapture','com.apple.RemoteManagement.ScreensharingAgent',0,2,4,1,NULL,NULL,NULL,'UNUSED',NULL,0,1661330000);"
+          
+          # 2. Granting Screen Capture permission to ARDAgent (Fixes Control/Input)
+          sudo sqlite3 "$TCC_DB_PATH" "REPLACE INTO access VALUES('kTCCServiceScreenCapture','com.apple.RemoteManagement.ARDAgent',0,2,4,1,NULL,NULL,NULL,'UNUSED',NULL,0,1661330000);"
+          
+          echo "✅ TCC Permissions injected."
+
+      - name: Enable macOS VNC & Restart Sharing Daemons
+        run: |
           echo "Setting up VNC Server..."
-          # VNC server start kar rahe hain aur legacy password set kar rahe hain
-          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -activate -configure -access -on -clientopts -setvnclegacy -vnclegacy yes -clientopts -setvncpw -vncpw "Admin@123" -restart -agent -privs -all
-          echo "✅ VNC Server Started Successfully."
+          # Start VNC server with legacy password 'Admin@123' for VNC viewer
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -activate -configure -access -on -clientopts -setvnclegacy -vnclegacy yes -clientopts -setvnpw -vncpw "Admin@123" -restart -agent -privs -all
+          
+          echo "Restarting Screen Sharing processes to apply new permissions..."
+          # Forcefully restart daemons to reload permission DB
+          sudo killall ScreensharingAgent || true
+          sudo killall ARDAgent || true
+          echo "✅ VNC Server Started & Daemons restarted."
 
       - name: Install and Start Ngrok
         run: |
@@ -37,6 +58,7 @@ jobs:
           echo "Is URL ko RealVNC mein dalo (shuru ka tcp:// hata dena)."
           echo "Mac Login Username: sinket"
           echo "Mac Login Password: Admin@123"
+          echo "Note: If RealVNC asks for a password first, use: Admin@123"
           echo "=========================================="
 
       - name: Keep Alive Loop
