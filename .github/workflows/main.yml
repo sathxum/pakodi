@@ -1,40 +1,37 @@
-name: Native-macOS-VNC-NoBlackScreen
+name: Nativee-macOS-VNC-NoBlackScreen
 
 on:
   workflow_dispatch:
 
 jobs:
   macos-setup:
-    runs-on: macos-latest # Native macOS runner
+    runs-on: macos-latest
     steps:
       - name: Create New Admin User
         run: |
           echo "Creating new admin user 'sinket'..."
-          # Admin user 'sinket' with password 'Admin@123'
           sudo sysadminctl -addUser sinket -fullName "Sinket Admin" -password "Admin@123" -admin
           echo "✅ User created."
 
-      - name: Permanently Fix TCC Screen Permissions (No Black Screen)
+      - name: Permanently Fix TCC Screen Permissions (Smart Inject)
         run: |
-          echo "Bypassing TCC Screen Recording permissions database..."
+          echo "Fixing TCC database schema mismatch..."
           TCC_DB_PATH="/Library/Application Support/com.apple.TCC/TCC.db"
           
-          # 1. Granting Screen Capture permission to ScreensharingAgent (Fixes Black Screen Image)
-          sudo sqlite3 "$TCC_DB_PATH" "REPLACE INTO access VALUES('kTCCServiceScreenCapture','com.apple.RemoteManagement.ScreensharingAgent',0,2,4,1,NULL,NULL,NULL,'UNUSED',NULL,0,1661330000);"
+          # Specific column names define kar diye hain taaki 17 vs 13 column wala error na aaye
+          sudo sqlite3 "$TCC_DB_PATH" "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version, indirect_object_identifier_type, flags) VALUES ('kTCCServiceScreenCapture', 'com.apple.RemoteManagement.ScreensharingAgent', 0, 2, 4, 1, 0, 0);"
           
-          # 2. Granting Screen Capture permission to ARDAgent (Fixes Control/Input)
-          sudo sqlite3 "$TCC_DB_PATH" "REPLACE INTO access VALUES('kTCCServiceScreenCapture','com.apple.RemoteManagement.ARDAgent',0,2,4,1,NULL,NULL,NULL,'UNUSED',NULL,0,1661330000);"
+          sudo sqlite3 "$TCC_DB_PATH" "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version, indirect_object_identifier_type, flags) VALUES ('kTCCServiceScreenCapture', 'com.apple.RemoteManagement.ARDAgent', 0, 2, 4, 1, 0, 0);"
           
-          echo "✅ TCC Permissions injected."
+          echo "✅ TCC Permissions properly injected."
 
       - name: Enable macOS VNC & Restart Sharing Daemons
         run: |
           echo "Setting up VNC Server..."
-          # Start VNC server with legacy password 'Admin@123' for VNC viewer
-          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -activate -configure -access -on -clientopts -setvnclegacy -vnclegacy yes -clientopts -setvnpw -vncpw "Admin@123" -restart -agent -privs -all
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -activate -configure -access -on -clientopts -setvnclegacy -vnclegacy yes -clientopts -setvncpw -vncpw "Admin@123" -restart -agent -privs -all
           
-          echo "Restarting Screen Sharing processes to apply new permissions..."
-          # Forcefully restart daemons to reload permission DB
+          echo "Restarting Screen Sharing processes..."
+          # Daemons ko restart kar rahe hain taaki naye permissions turant apply ho jayein
           sudo killall ScreensharingAgent || true
           sudo killall ARDAgent || true
           echo "✅ VNC Server Started & Daemons restarted."
@@ -44,10 +41,9 @@ jobs:
           echo "Installing Ngrok via Homebrew..."
           brew install ngrok/ngrok/ngrok
           
-          # Aapka direct Ngrok token
+          # Aapka token
           ngrok config add-authtoken 3BM6N01n6rva49E8A9dCmdkFQ9O_5K2ifGy74gi8TaAQ28wx8
           
-          # Port 5900 (VNC) ko tunnel karna
           ngrok tcp 5900 --log=stdout > ngrok.log &
           sleep 10
           
@@ -58,10 +54,8 @@ jobs:
           echo "Is URL ko RealVNC mein dalo (shuru ka tcp:// hata dena)."
           echo "Mac Login Username: sinket"
           echo "Mac Login Password: Admin@123"
-          echo "Note: If RealVNC asks for a password first, use: Admin@123"
           echo "=========================================="
 
       - name: Keep Alive Loop
         run: |
-          # Session ko active rakhne ke liye sleep loop
           sleep 21600 
