@@ -1,0 +1,45 @@
+name: Native-macOS-VNC
+
+on:
+  workflow_dispatch:
+
+jobs:
+  macos-setup:
+    runs-on: macos-latest
+    steps:
+      - name: Create New Admin User & Enable VNC
+        run: |
+          echo "Creating new admin user..."
+          # Naya admin user 'sinket' bana rahe hain jiska password 'Admin@123' hoga
+          sudo sysadminctl -addUser sinket -fullName "Sinket Admin" -password "Admin@123" -admin
+          
+          echo "Setting up VNC Server..."
+          # VNC server start kar rahe hain aur legacy password set kar rahe hain
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -activate -configure -access -on -clientopts -setvnclegacy -vnclegacy yes -clientopts -setvncpw -vncpw "Admin@123" -restart -agent -privs -all
+          echo "✅ VNC Server Started Successfully."
+
+      - name: Install and Start Ngrok
+        run: |
+          echo "Installing Ngrok via Homebrew..."
+          brew install ngrok/ngrok/ngrok
+          
+          # Aapka direct Ngrok token
+          ngrok config add-authtoken 3BM6N01n6rva49E8A9dCmdkFQ9O_5K2ifGy74gi8TaAQ28wx8
+          
+          # Port 5900 (VNC) ko tunnel karna
+          ngrok tcp 5900 --log=stdout > ngrok.log &
+          sleep 10
+          
+          echo "=========================================="
+          echo "🚀 NATIVE MACOS READY TO CONNECT"
+          echo "=========================================="
+          curl -s http://localhost:4040/api/tunnels | jq -r '.tunnels[0].public_url'
+          echo "Is URL ko RealVNC mein dalo (shuru ka tcp:// hata dena)."
+          echo "Mac Login Username: sinket"
+          echo "Mac Login Password: Admin@123"
+          echo "=========================================="
+
+      - name: Keep Alive Loop
+        run: |
+          # Session ko active rakhne ke liye sleep loop
+          sleep 21600 
