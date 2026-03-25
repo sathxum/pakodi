@@ -1,11 +1,11 @@
-name: Nativee-macOS-VNC-NoBlackScreen
+name: Native-macOS-VNC-Working
 
 on:
   workflow_dispatch:
 
 jobs:
   macos-setup:
-    runs-on: macos-latest
+    runs-on: macos-13 # <--- Sabse bada fix yahan hai! Hum Sonoma se Ventura par aa gaye hain.
     steps:
       - name: Create New Admin User
         run: |
@@ -13,35 +13,38 @@ jobs:
           sudo sysadminctl -addUser sinket -fullName "Sinket Admin" -password "Admin@123" -admin
           echo "✅ User created."
 
-      - name: Permanently Fix TCC Screen Permissions (Smart Inject)
+      - name: Permanently Fix TCC Screen Permissions
         run: |
           echo "Fixing TCC database schema mismatch..."
           TCC_DB_PATH="/Library/Application Support/com.apple.TCC/TCC.db"
           
-          # Specific column names define kar diye hain taaki 17 vs 13 column wala error na aaye
           sudo sqlite3 "$TCC_DB_PATH" "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version, indirect_object_identifier_type, flags) VALUES ('kTCCServiceScreenCapture', 'com.apple.RemoteManagement.ScreensharingAgent', 0, 2, 4, 1, 0, 0);"
           
           sudo sqlite3 "$TCC_DB_PATH" "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version, indirect_object_identifier_type, flags) VALUES ('kTCCServiceScreenCapture', 'com.apple.RemoteManagement.ARDAgent', 0, 2, 4, 1, 0, 0);"
           
           echo "✅ TCC Permissions properly injected."
 
-      - name: Enable macOS VNC & Restart Sharing Daemons
+      - name: Prevent Display Sleep & Enable macOS VNC
         run: |
+          echo "Waking up virtual display..."
+          sudo pmset -a displaysleep 0
+          sudo pmset -a sleep 0
+          caffeinate -u -t 5 & # Display ko force awake rakhega
+          
           echo "Setting up VNC Server..."
+          # Note: Red warning aayegi, par usko ignore karna, VNC background mein start ho jayega
           sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -activate -configure -access -on -clientopts -setvnclegacy -vnclegacy yes -clientopts -setvncpw -vncpw "Admin@123" -restart -agent -privs -all
           
-          echo "Restarting Screen Sharing processes..."
-          # Daemons ko restart kar rahe hain taaki naye permissions turant apply ho jayein
           sudo killall ScreensharingAgent || true
           sudo killall ARDAgent || true
-          echo "✅ VNC Server Started & Daemons restarted."
+          echo "✅ VNC Server Started."
 
       - name: Install and Start Ngrok
         run: |
           echo "Installing Ngrok via Homebrew..."
           brew install ngrok/ngrok/ngrok
           
-          # Aapka token
+          # Aapka direct token
           ngrok config add-authtoken 3BM6N01n6rva49E8A9dCmdkFQ9O_5K2ifGy74gi8TaAQ28wx8
           
           ngrok tcp 5900 --log=stdout > ngrok.log &
@@ -51,7 +54,7 @@ jobs:
           echo "🚀 NATIVE MACOS READY TO CONNECT"
           echo "=========================================="
           curl -s http://localhost:4040/api/tunnels | jq -r '.tunnels[0].public_url'
-          echo "Is URL ko RealVNC mein dalo (shuru ka tcp:// hata dena)."
+          echo "Is URL ko RealVNC mein dalo (tcp:// hata dena)."
           echo "Mac Login Username: sinket"
           echo "Mac Login Password: Admin@123"
           echo "=========================================="
